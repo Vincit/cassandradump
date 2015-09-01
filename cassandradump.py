@@ -286,17 +286,27 @@ def setup_cluster():
     else:
         nodes = [args.host]
 
+    if args.port is None:
+        port = 9042
+    else:
+        port = int(args.port)
+
+    if args.protocol_version is None:
+        protocol_version = 1
+    else:
+        protocol_version = int(args.protocol_version)
+
     cluster = None
 
-    if args.protocol_version is not None and args.username is not None and args.password is not None:
-        if args.protocol_version == '1':
+    if args.username is not None and args.password is not None:
+        if protocol_version == 1:
             credentials = {'username': args.username, 'password': args.password}
-            cluster = Cluster(contact_points=nodes, protocol_version=1, auth_provider=getCredential, load_balancing_policy=cassandra.policies.WhiteListRoundRobinPolicy(nodes))
-        elif args.protocol_version == '2':
+            cluster = Cluster(port=port, contact_points=nodes, protocol_version=protocol_version, auth_provider=getCredential, load_balancing_policy=cassandra.policies.WhiteListRoundRobinPolicy(nodes))
+        elif protocol_version > 1:
             ap = PlainTextAuthProvider(username=args.username, password=args.password)
-            cluster = Cluster(contact_points=nodes, protocol_version=2, auth_provider=ap, load_balancing_policy=cassandra.policies.WhiteListRoundRobinPolicy(nodes))
+            cluster = Cluster(port=port, contact_points=nodes, protocol_version=protocol_version, auth_provider=ap, load_balancing_policy=cassandra.policies.WhiteListRoundRobinPolicy(nodes))
     else:
-        cluster = Cluster(contact_points=nodes, load_balancing_policy=cassandra.policies.WhiteListRoundRobinPolicy(nodes))
+        cluster = Cluster(port=port, contact_points=nodes, protocol_version=protocol_version, load_balancing_policy=cassandra.policies.WhiteListRoundRobinPolicy(nodes))
     session = cluster.connect()
 
     session.default_timeout = TIMEOUT
@@ -318,6 +328,7 @@ def main():
     parser.add_argument('--export-file', help='export data to the specified file')
     parser.add_argument('--filter', help='export a slice of a column family according to a CQL filter. This takes essentially a typical SELECT query stripped of the initial "SELECT ... FROM" part (e.g. "system.schema_columns where keyspace_name =\'OpsCenter\'", and exports only that data. Can be specified multiple times', action='append')
     parser.add_argument('--host', help='the address of a Cassandra node in the cluster (localhost if omitted)')
+    parser.add_argument('--port', help='the native port of a Cassandra node in the cluster (9042 if omitted)')
     parser.add_argument('--import-file', help='import data from the specified file')
     parser.add_argument('--keyspace', help='export a keyspace along with all its column families. Can be specified multiple times', action='append')
     parser.add_argument('--no-create', help='don\'t generate create (and drop) statements', action='store_true')
@@ -337,10 +348,10 @@ def main():
         sys.stderr.write('--import-file and --export-file can\'t be specified at the same time\n')
         sys.exit(1)
 
-    if args.protocol_version is not None:
-    	if args.username is None or args.password is None:
-    		sys.stderr.write('--username and --password must be specified\n')
-    		sys.exit(1)
+    if args.username is not None or args.password is not None:
+        if args.protocol_version is None:
+            sys.stderr.write('--username and --password and --protocol_version must be specified\n')
+            sys.exit(1)
 
     session = setup_cluster()
 
